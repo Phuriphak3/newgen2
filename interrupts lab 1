@@ -1,0 +1,44 @@
+// --- กำหนด Pin ---
+#define LED1_PIN    26  // LED ที่กระพริบตลอดเวลา
+#define LED2_PIN    25  // LED ที่ติด/ดับ เมื่อกดปุ่ม (สมมติว่าเป็น Pin 22)
+#define BUTTON_PIN  32  // ปุ่มกด (ต่อแบบ Pull-up)
+
+// --- ตัวแปรสำหรับ ISR ---
+// ต้องใช้ volatile กับตัวแปรที่ถูกแก้ไขใน Interrupt เพื่อป้องกัน Compiler optimize ผิดพลาด
+volatile bool led2State = false; 
+
+// --- ฟังก์ชัน Interrupt (ISR) ---
+// IRAM_ATTR บังคับให้เก็บ code ส่วนนี้ใน RAM เพื่อความเร็วสูงสุด
+void IRAM_ATTR IO_INT_ISR() {
+  // สลับสถานะตัวแปร
+  led2State = !led2State;
+  // สั่งงาน LED2 ทันที
+  digitalWrite(LED2_PIN, led2State);
+}
+
+void setup() {
+  // 1. กำหนดโหมดขา I/O
+  pinMode(LED1_PIN, OUTPUT);
+  pinMode(LED2_PIN, OUTPUT);
+  
+  // ใช้ INPUT_PULLUP เพื่อความชัวร์ หากวงจรภายนอก Pull-up ไม่แน่นหนา
+  // แต่ถ้าวงจรมี R-Pullup อยู่แล้วใช้ INPUT เฉยๆ ก็ได้
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+  // 2. ตั้งค่า Interrupt
+  // ใช้ FALLING เพราะวงจรเป็น Pull-up (กดแล้วลงกราวด์) 
+  // เราต้องการให้ทำงานทันทีที่ "กดลง" (High -> Low)
+  attachInterrupt(BUTTON_PIN, IO_INT_ISR, FALLING);
+}
+
+void loop() {
+  // --- ส่วนงานของ LED1 (Main Task) ---
+  // ทำงานไปเรื่อยๆ โดยไม่ต้องพะวงเรื่องปุ่มกด
+  // เพราะถ้ามีการกดปุ่ม CPU จะกระโดดไปทำ ISR เอง
+  
+  digitalWrite(LED1_PIN, HIGH);
+  delay(500); // ติด 0.5 วินาที
+  digitalWrite(LED1_PIN, LOW);
+  delay(500); // ดับ 0.5 วินาที
+  // รวม 1 รอบ = 1 วินาที
+}
