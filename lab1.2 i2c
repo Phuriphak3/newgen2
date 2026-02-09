@@ -1,0 +1,53 @@
+#include <Adafruit_I2CDevice.h>
+
+#define PCF8574_Address 0x20
+Adafruit_I2CDevice i2c_dev = Adafruit_I2CDevice(PCF8574_Address);
+
+uint8_t buffer[1];    // ใช้เก็บข้อมูลที่จะส่งหรือรับ
+uint8_t bitConfig = 0; // ใช้สำหรับตั้งค่าขา
+
+void setup() {
+  Serial.begin(9600);
+  
+  // 1. ตรวจสอบการเชื่อมต่อ I2C
+  if (!i2c_dev.begin()) {
+    Serial.println("Device not found!");
+    while (1);
+  }
+  Serial.println("PCF8574 Found!");
+
+  // 2. ตั้งค่าขา P0 ให้เป็น INPUT (ต้องเขียนเลข 1 ลงไปในบิตนั้น)
+  bitSet(bitConfig, 0); 
+  // สมมติให้ขาอื่น (รวมถึง P7) เริ่มต้นเป็น 1 (High) เพื่อให้ LED ดับก่อน
+  bitSet(bitConfig, 7); 
+  
+  buffer[0] = bitConfig;
+  i2c_dev.write(buffer, 1);
+}
+
+void loop() {
+  // 3. อ่านสถานะจาก PCF8574 (อ่านทั้ง 8 ขาพร้อมกัน)
+  i2c_dev.read(buffer, 1);
+  
+  // 4. เช็คสถานะที่บิต 0 (ปุ่มกด)
+  // ปกติถ้าใช้ INPUT_PULLUP ค่าจะเป็น 1, เมื่อกดปุ่มต่อลง GND จะเป็น 0
+  uint8_t P0_state = bitRead(buffer[0], 0);
+  
+  if (P0_state == LOW) {
+    Serial.println("Button Pressed!");
+    
+    // 5. สั่งเปิดไฟ LED ที่ขา P7 (ส่ง 0 ไปที่บิต 7 เพื่อ Sink Current)
+    bitClear(buffer[0], 7); 
+  } else {
+    // 6. สั่งปิดไฟ LED ที่ขา P7 (ส่ง 1 ไปที่บิต 7)
+    bitSet(buffer[0], 7);
+  }
+
+  // *สำคัญ* ต้องรักษาบิตที่ 0 ให้เป็น 1 เสมอเพื่อให้ทำหน้าที่เป็น Input ต่อไปได้
+  bitSet(buffer[0], 0); 
+
+  // 7. ส่งค่าที่แก้ไขแล้วกลับไปที่ชิป
+  i2c_dev.write(buffer, 1);
+
+  delay(50); // ป้องกันสัญญาณรบกวน (Debounce)
+}
