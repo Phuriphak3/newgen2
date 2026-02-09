@@ -1,0 +1,34 @@
+#define SERVO_PIN   18
+#define SWITCH_PIN  4
+
+const int freq = 50;
+const int resolution = 10; 
+
+// ปรับค่าตามสูตร (Pulse_ms / 20) * 1023
+const int DUTY_HOME = 50;    // ประมาณ 1ms (0 องศา)
+const int DUTY_ACTION = 120; // ประมาณ 2.3ms (เกือบ 180 องศา)
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(SWITCH_PIN, INPUT_PULLUP);
+
+  // ตั้งค่า PWM สำหรับ ESP32 Core 3.0+
+  ledcAttach(SERVO_PIN, freq, resolution);
+
+  // เริ่มต้น: เก็บแขนเข้าที่
+  ledcWrite(SERVO_PIN, DUTY_HOME);
+}
+
+void loop() {
+  if (digitalRead(SWITCH_PIN) == LOW) { // สวิตช์ถูกเปิด (Pull-up)
+    Serial.println("Action!");
+    
+    // ยื่นแขนออก
+    ledcWrite(SERVO_PIN, DUTY_ACTION);
+    delay(600); 
+
+    // เก็บแขนกลับ
+    ledcWrite(SERVO_PIN, DUTY_HOME);
+    delay(600); 
+  }
+}
