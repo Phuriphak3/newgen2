@@ -1,0 +1,54 @@
+const int ledPin = 16;      // ขา LED
+const int buttonPin = 32;   // ขาปุ่มกด
+const int freq = 5000;      // ความถี่ 5kHz (เหมาะกับ LED)
+const int resolution = 8;   // 8-bit (0-255)
+
+volatile int brightnessStep = 0; // ตัวแปรเก็บระดับ (0-4)
+volatile bool buttonPressed = false;
+
+// ISR: ทำงานเมื่อมีการกดปุ่ม
+void IRAM_ATTR handleButton() {
+  buttonPressed = true; 
+}
+
+void setup() {
+  Serial.begin(115200);
+  
+  // ตั้งค่า PWM
+  ledcAttach(ledPin, freq, resolution);
+  
+  // ตั้งค่าปุ่มกดและ Interrupt
+  pinMode(buttonPin, INPUT_PULLUP);
+  attachInterrupt(buttonPin, handleButton, FALLING); 
+
+  // เริ่มต้นที่ความสว่าง 0
+  ledcWrite(ledPin, 0);
+}
+
+void loop() {
+  if (buttonPressed) {
+    // หน่วงเวลาเล็กน้อยเพื่อแก้ปัญหาปุ่มสั่น (Debounce)
+    delay(200); 
+    
+    // เปลี่ยนระดับ 0 -> 1 -> 2 -> 3 -> 4 และวนกลับมา 0
+    brightnessStep = (brightnessStep + 1) % 5;
+    
+    int dutyValue = 0;
+    
+    // เลือกค่า Duty ตามระดับ
+    switch (brightnessStep) {
+      case 0: dutyValue = 0;   break;   // 0%
+      case 1: dutyValue = 64;  break;   // 25%
+      case 2: dutyValue = 127; break;   // 50%
+      case 3: dutyValue = 191; break;   // 75%
+      case 4: dutyValue = 255; break;   // 100%
+    }
+    
+    ledcWrite(ledPin, dutyValue);
+    
+    Serial.print("Current Level: "); Serial.print(brightnessStep);
+    Serial.print(" | Duty Value: "); Serial.println(dutyValue);
+    
+    buttonPressed = false; // Reset สถานะปุ่ม
+  }
+}
