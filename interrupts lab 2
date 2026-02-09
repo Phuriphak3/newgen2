@@ -1,0 +1,45 @@
+#define BUZZER_PIN 21  // เปลี่ยนเป็นขาที่ต่อ Buzzer (โจทย์ตัวอย่างใช้ 21)
+hw_timer_t *My_timer = NULL;
+
+// --- ส่วนที่ต้องแก้ไขตามรหัสนักศึกษา ---
+int id_last_two = 99; // <<-- เปลี่ยนเลข 99 เป็นเลขท้ายรหัสนักศึกษาของคุณ
+// ----------------------------------
+
+void IRAM_ATTR onTimer() {
+  // Toggle สถานะของขา Output
+  digitalWrite(BUZZER_PIN, !digitalRead(BUZZER_PIN));
+}
+
+void setup() {
+  pinMode(BUZZER_PIN, OUTPUT);
+  Serial.begin(115200);
+
+  // 1. คำนวณความถี่เป้าหมาย
+  int target_freq = id_last_two * 10;
+  if (id_last_two == 0) target_freq = 1000;
+
+  // 2. คำนวณค่า Alarm
+  // เนื่องจาก Square Wave 1 รอบ (Cycle) ต้องมีการ Toggle 2 ครั้ง (ติดและดับ)
+  // เราจึงต้อง Interrupt ด้วยความถี่เป็น 2 เท่าของความถี่ที่ต้องการ
+  // สูตร: 1,000,000 / (target_freq * 2)
+  uint32_t alarm_value = 1000000 / (target_freq * 2);
+
+  Serial.print("Target Frequency: "); Serial.println(target_freq);
+  Serial.print("Alarm Value: "); Serial.println(alarm_value);
+
+  // 3. เริ่มต้น Timer (ฐานเวลา 1MHz = 1,000,000 ticks ต่อวินาที)
+  // สำหรับ ESP32 Core 3.x ขึ้นไปใช้ timerBegin(frequency)
+  My_timer = timerBegin(1000000); 
+
+  // 4. ผูกฟังก์ชัน ISR เข้ากับ Timer
+  timerAttachInterrupt(My_timer, &onTimer);
+
+  // 5. ตั้งค่า Alarm
+  // ค่าที่ใส่คือจำนวน tick (ในที่นี้คือ microseconds) ที่จะให้เกิด Interrupt
+  // true = ให้เริ่มนับใหม่ทันทีหลังจากเกิด Interrupt (Autoreload)
+  timerAlarm(My_timer, alarm_value, true, 0);
+}
+
+void loop() {
+  // ปล่อยว่างไว้ Square Wave จะถูกสร้างโดย Hardware Timer ในเบื้องหลัง
+}
