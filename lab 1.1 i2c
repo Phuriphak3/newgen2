@@ -1,0 +1,33 @@
+#include <Adafruit_PCF8574.h>
+
+#define PCF8574_ADDRESS 0x20
+Adafruit_PCF8574 pcf;
+
+void setup() {
+  Serial.begin(9600);
+  
+  if (!pcf.begin(PCF8574_ADDRESS, &Wire)) {
+    Serial.println("Couldn't find PCF8574");
+    while (1);
+  }
+
+  // กำหนดขา P0 เป็น INPUT_PULLUP (สถานะปกติจะเป็น HIGH)
+  pcf.pinMode(0, INPUT_PULLUP); 
+  
+  // กำหนดขา P7 เป็น OUTPUT สำหรับ LED
+  pcf.pinMode(7, OUTPUT);
+}
+
+void loop() {
+  // อ่านค่าจากขา 0
+  bool buttonState = pcf.digitalRead(0);
+
+  if (buttonState == LOW) { // ถ้าค่าเป็น LOW แสดงว่า "กดปุ่ม" (เพราะต่อลง GND)
+    pcf.digitalWrite(7, LOW);  // เปิดไฟ LED (แบบ Sink Current)
+    Serial.println("Button Pressed!");
+  } else {
+    pcf.digitalWrite(7, HIGH); // ปิดไฟ LED
+  }
+  
+  delay(10); // เล็กน้อยเพื่อความเสถียร
+}
