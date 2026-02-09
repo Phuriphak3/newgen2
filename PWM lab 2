@@ -1,0 +1,60 @@
+#include <ESP32Servo.h>
+
+// --- กำหนด Pin ---
+#define SERVO_PIN   18
+#define SWITCH_PIN  4   // ขาที่ต่อกับ Toggle Switch
+
+// --- การตั้งค่า Servo (ต้องจูนค่าตรงนี้เอง!) ---
+// ANG_HOME: องศาที่แขนซ่อนอยู่ในกล่อง
+const int ANG_HOME = 10;   
+
+// ANG_ACTION: องศาที่แขนยื่นออกมาดันสวิตช์ (อย่าให้เยอะเกินจนงัดกล่องพัง)
+const int ANG_ACTION = 120; 
+
+Servo myservo;
+
+void setup() {
+  Serial.begin(115200);
+
+  // 1. ตั้งค่า Switch (ใช้ Pull-up)
+  // ถ้าสวิตช์เปิด (วงจรขาด) = HIGH
+  // ถ้าสวิตช์ปิด (ต่อลงกราวด์) = LOW
+  pinMode(SWITCH_PIN, INPUT_PULLUP);
+
+  // 2. ตั้งค่า Servo
+  myservo.setPeriodHertz(50); // Standard 50hz servo
+  myservo.attach(SERVO_PIN);  // บาง Library อาจต้องใส่ min/max pulse (500, 2400)
+
+  // เริ่มต้น: สั่งให้แขนเก็บเข้าที่ทันที
+  myservo.write(ANG_HOME);
+}
+
+void loop() {
+  // อ่านค่าสวิตช์
+  // เนื่องจากใช้ INPUT_PULLUP:
+  // - ถ้าเราสับสวิตช์ (ON) มันจะเชื่อมลง GND -> อ่านได้ LOW
+  int switchState = digitalRead(SWITCH_PIN);
+
+  // ตรวจสอบว่า "มีคนมาเปิดสวิตช์เล่นหรือเปล่า?"
+  if (switchState == LOW) { 
+    Serial.println("Switch turned ON! -> Attacking...");
+    
+    // --- Step 1: ยื่นแขนออกมาดันสวิตช์ ---
+    // เพื่อความสมูท อาจจะวน Loop หรือสั่ง write ทีเดียวก็ได้ 
+    // ถ้าสั่งทีเดียวจะเร็วและแรง (เหมาะกับ Useless Machine)
+    myservo.write(ANG_ACTION);
+    
+    // รอเวลาให้แขนเดินทางไปถึงและดันสวิตช์จนดับ (ปรับเวลาตามจริง)
+    delay(400); 
+
+    // --- Step 2: เก็บแขนกลับ ---
+    Serial.println("Mission Complete -> Going Home");
+    myservo.write(ANG_HOME);
+    
+    // รอให้เก็บแขนเสร็จก่อนจะเช็คสถานะใหม่
+    delay(400);
+  }
+  
+  // พักเล็กน้อย
+  delay(20);
+}   // lab pwm2
