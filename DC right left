@@ -1,0 +1,140 @@
+#include <WiFi.h>
+#include <MQTT.h>
+
+const char ssid[] = "ASUS8275";
+const char pass[] = "8516W/3i";
+
+const char mqtt_broker[] = "test.mosquitto.org"; 
+const char mqtt_client_id[] = "esp32_hbridge_logic_001";
+int MQTT_PORT = 1883;
+
+// --- MQTT Topics ---
+const char topic_status_motor[] = "myhome/motor/status"; // แสดง หมุนซ้าย, หมุนขวา, หยุด
+const char topic_status_led[] = "myhome/led/status";     // แสดง ติด, ดับ
+const char topic_cmd_motor[] = "myhome/set_motor";      // รับคำสั่ง left, right, stop
+const char topic_cmd_led[] = "myhome/set_led";          // รับคำสั่ง toggle (กดติดให้กลับด้าน)
+
+// --- Pin Definitions ---
+const int PIN_MOTOR_IN1 = 16; 
+const int PIN_MOTOR_IN2 = 17; 
+const int PIN_LED = 2;       // ไฟ LED แสดงสถานะ
+const int PIN_BUTTON = 32;   // ปุ่มกด Physical
+
+// --- Global Variables ---
+WiFiClient net;
+MQTTClient client;
+
+unsigned long lastMillis = 0;
+int motorStep = 0;      // 0:หยุด, 1:ซ้าย, 2:ขวา
+int lastDirection = 1;  // จำทิศทางล่าสุด (1=ซ้าย, 2=ขวา) เพื่อใช้กับปุ่ม LED
+bool ledState = false;
+
+// Debounce
+int lastButtonState = HIGH;
+unsigned long lastDebounceTime = 0;
+unsigned long debounceDelay = 50;
+
+// ฟังก์ชันควบคุมมอเตอร์และ LED
+void updateHardware(int step) {
+  motorStep = step;
+  if (motorStep == 1) { // หมุนซ้าย
+    digitalWrite(PIN_MOTOR_IN1, HIGH);
+    digitalWrite(PIN_MOTOR_IN2, LOW);
+    digitalWrite(PIN_LED, HIGH);
+    ledState = true;
+    lastDirection = 1;
+  } 
+  else if (motorStep == 2) { // หมุนขวา
+    digitalWrite(PIN_MOTOR_IN1, LOW);
+    digitalWrite(PIN_MOTOR_IN2, HIGH);
+    digitalWrite(PIN_LED, HIGH);
+    ledState = true;
+    lastDirection = 2;
+  } 
+  else { // หยุด
+    digitalWrite(PIN_MOTOR_IN1, LOW);
+    digitalWrite(PIN_MOTOR_IN2, LOW);
+    digitalWrite(PIN_LED, LOW);
+    ledState = false;
+    motorStep = 0;
+  }
+  publishStatus();
+}
+
+void publishStatus() {
+  String motorMsg = (motorStep == 1) ? "หมุนซ้าย" : (motorStep == 2) ? "หมุนขวา" : "หยุด";
+  String ledMsg = (ledState) ? "ติด" : "ดับ";
+  client.publish(topic_status_motor, motorMsg);
+  client.publish(topic_status_led, ledMsg);
+}
+
+void connect() {
+  while (WiFi.status() != WL_CONNECTED) { delay(1000); }
+  while (!client.connect(mqtt_client_id)) { delay(1000); }
+  client.subscribe(topic_cmd_motor);
+  client.subscribe(topic_cmd_led);
+}
+
+void messageReceived(String &topic, String &payload) {
+  if (topic == topic_cmd_motor) {
+    if (payload == "left") updateHardware(1);
+    else if (payload == "right") updateHardware(2);
+    else if (payload == "stop") updateHardware(0);
+  }
+  
+  if (topic == topic_cmd_led) {
+    if (payload == "toggle") {
+      if (!ledState) {
+        // ถ้ากดติด ให้หมุนกลับด้านจากก่อนหน้านี้
+        int newDir = (lastDirection == 1) ? 2 : 1;
+        updateHardware(newDir);
+      } else {
+        updateHardware(0); // ถ้ากดดับ ให้หยุด
+      }
+    }
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(PIN_MOTOR_IN1, OUTPUT);
+  pinMode(PIN_MOTOR_IN2, OUTPUT);
+  pinMode(PIN_LED, OUTPUT);
+  pinMode(PIN_BUTTON, INPUT_PULLUP);
+
+  WiFi.begin(ssid, pass);
+  client.begin(mqtt_broker, MQTT_PORT, net);
+  client.onMessage(messageReceived);
+  connect();
+  updateHardware(0);
+}
+
+void loop() {
+  client.loop();
+  if (!client.connected()) connect();
+
+  // --- 1. Logic ปุ่มกดวนรอบ (ซ้าย -> ขวา -> หยุด) ---
+  int reading = digitalRead(PIN_BUTTON);
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
+  }
+
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    static int buttonState = HIGH;
+    if (reading != buttonState) {
+      buttonState = reading;
+      if (buttonState == LOW) { 
+        int nextStep = motorStep + 1;
+        if (nextStep > 2) nextStep = 0;
+        updateHardware(nextStep);
+      }
+    }
+  }
+  lastButtonState = reading;
+
+  // --- 2. ส่งสถานะอัปเดตทุก 2 วินาที (Optional) ---
+  if (millis() - lastMillis > 2000) {
+    lastMillis = millis();
+    publishStatus();
+  }
+}
